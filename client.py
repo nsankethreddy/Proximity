@@ -6,7 +6,6 @@ from sys import platform
 import sys
 import base64
 
-
 class clientType:
 
     PORT = 5050
@@ -17,7 +16,7 @@ class clientType:
     client = ''
 
     def __init__(self):
-        if platform == "linux" or platform == "linux2":
+        if platform == "linux" or platform == "linux2" or platform == "darwin":
             os.system('clear')
         elif platform == "win32":
             os.system('cls')
@@ -31,8 +30,8 @@ class clientType:
     def getName(self):
         self.username = input("Enter your username: ")
         while not self.username.isalpha():
-            print(" \n \t ERROR: The username should only contain alphabates. \n")
-            self.username = input('Enter server name : ')
+            print(" \n \t ERROR: The username should only contain alphabets. \n")
+            self.username = input('Enter username : ')
 
     def decode_key(self, valu):
         try:
@@ -58,7 +57,7 @@ class clientType:
             return dec_ip
 
     def receive(self):
-        self. username
+        #self. username
         while True:
             try:
                 message = self.client.recv(1024).decode('utf-8')
@@ -67,15 +66,60 @@ class clientType:
                 elif message == 'Server left':
                     print('\nServer has disconnected\n')
                     os._exit(0)
+
                 elif 'Connected to' in message:
                     print('\n \t ', message, '\n')
+
                 elif 'Username updated to [' in message:
                     print(message)
                     self.username = message[25:-1]
+
+                ## Receiving images and files
+
+                elif message.startswith("file:"):
+                    fname, fsize = message[5:].split(";")
+                    # remove absolute path if there is
+                    fname = os.path.basename(fname)
+                    # convert to integer
+                    fsize = int(fsize)
+                    if not os.path.exists('Proximity_files'):
+                        os.mkdir('Proximity_files')
+                    fname = os.path.join('Proximity_files', fname)
+                    with open(fname, "wb") as f:
+                        bytes_read = self.client.recv(fsize)
+                        f.write(bytes_read)
+                    print()
+                
+                elif message.startswith("image: "):
+                    fname,fsize = message[7:].split()
+                    fpath='Proximity_images'
+                    if not os.path.exists(fpath):
+                        os.makedirs(fpath)
+                    pwd=os.getcwd()
+                    os.chdir(fpath)
+                    fsize = int(fsize)
+                    c=0
+                    k=(fsize//512)*512
+                    with open(fname,"wb") as f:
+                        while True:
+                            chunk=self.client.recv(512)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            c+=512
+                            if c==k:
+                                break
+                        if fsize-k:
+                            chunk=self.client.recv(fsize-k+1)
+                            f.write(chunk) 
+                    os.chdir(pwd)
+                    print('Received Image successfully')
+
                 else:
                     print('\t\t\t\t', message)
+
             except:
-                print("An error occured!")
+                print("An error occurred!")
                 self.client.close()
                 break
 
@@ -88,15 +132,52 @@ class clientType:
                     self.client.close()
                     print('You will be disconnected')
                     os._exit(0)
-                else:
-                    message = f'[{self.username}] : {input_val}'
+
+                ## Sending images and files
+
+                elif input_val.startswith("image:"):
+                    fname = input_val[6:]
+                    fsize = os.path.getsize(fname)
+                    iname=os.path.basename(fname)
+                    message='image: '+iname+' '+str(fsize)
+                    self.client.send(message.encode('utf-8'))
+                    k=(fsize//512)*512
+                    c=0
+                    with open(fname,"rb") as f:
+                        while True:
+                            chunks = f.read(512)
+                            if not chunks:
+                                break
+                            c+=512
+                            self.client.send(chunks)
+                            if c==k:
+                                break
+                        if fsize-k:
+                            chunks=f.read(fsize-k+1)
+                            self.client.send(chunks)
+                    print('Sent Image successfully')
+
+                elif input_val.startswith("file:"):
+                    fname=input_val[5:]
+                    fsize=os.path.getsize(fname)
+                    message = input_val+";"+str(fsize)
+                    self.client.send(message.encode('utf-8'))
+                    
+                    with open(fname, "rb") as f:
+                        
+                        bytes_read = f.read(fsize)
+                        self.client.send(bytes_read)
+                        
+                    print("\n \t File sent\n")
+                else:   
+                    message = '[{}] : {}'.format(self.username, input_val)
                     self.client.send(message.encode('utf-8'))
             except:
-                print('\n \t Error Occoured while Reading input \n')
-                self.client.send(self.DISCONNECT_MESSAGE.encode('utf-8'))
-                self.client.close()
-                print('You will be disconnected')
-                os._exit(0)
+                print('\n \t Error Occurred while Reading input \n')
+                # self.client.send(self.DISCONNECT_MESSAGE.encode('utf-8'))
+                # self.client.close()
+                # print('You will be disconnected')
+                # os._exit(0)
 
     def keyboardInterruptHandler(self, signal, frame):
         print('Interrupted')
